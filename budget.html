@@ -502,15 +502,33 @@
 
       <div class="sap-section">
         <div class="sap-title">⚙️ SAP 연동 설정</div>
+        <div class="form-row single">
+          <div class="field">
+            <label>구분</label>
+            <select id="iv-type-sap">
+              <option value="전용">전용</option>
+              <option value="LE확인">LE확인</option>
+            </select>
+          </div>
+        </div>
         <div class="form-row">
           <div class="field">
             <label>FROM 코스트센터</label>
             <select id="iv-from-cc">
-              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
               <option value="H2200">H2200 · 전략추진실</option>
+              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
               <option value="D2034">D2034 · ATS운영팀(마케팅)</option>
             </select>
           </div>
+          <div class="field">
+            <label>FROM G/L계정</label>
+            <select id="iv-from-gl">
+              <option value="343002">343002 · 광고선전비(조사연구)</option>
+              <option value="343006">343006 · 광고선전비(컨텐츠)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
           <div class="field">
             <label>TO 코스트센터</label>
             <select id="iv-to-cc">
@@ -519,20 +537,11 @@
               <option value="D2034">D2034 · ATS운영팀(마케팅)</option>
             </select>
           </div>
-        </div>
-        <div class="form-row">
           <div class="field">
-            <label>G/L계정</label>
-            <select id="iv-gl">
+            <label>TO G/L계정</label>
+            <select id="iv-to-gl">
               <option value="343002">343002 · 광고선전비(조사연구)</option>
               <option value="343006">343006 · 광고선전비(컨텐츠)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>구분</label>
-            <select id="iv-type-sap">
-              <option value="전용">전용</option>
-              <option value="LE확인">LE확인</option>
             </select>
           </div>
         </div>
@@ -723,16 +732,33 @@
         <div class="sap-title">⚙️ SAP 연동 설정</div>
         <div class="form-row">
           <div class="field">
-            <label>코스트센터</label>
-            <select id="ats-cc">
+            <label>FROM 코스트센터</label>
+            <select id="ats-from-cc">
               <option value="D2034">D2034 · ATS운영팀(마케팅)(배부용)</option>
               <option value="M2010">M2010 · 잡코리아마케팅팀</option>
               <option value="H2200">H2200 · 전략추진실</option>
             </select>
           </div>
           <div class="field">
-            <label>G/L계정</label>
-            <select id="ats-gl">
+            <label>FROM G/L계정</label>
+            <select id="ats-from-gl">
+              <option value="343006">343006 · 광고선전비(컨텐츠)</option>
+              <option value="343002">343002 · 광고선전비(조사연구)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>TO 코스트센터</label>
+            <select id="ats-to-cc">
+              <option value="D2034">D2034 · ATS운영팀(마케팅)(배부용)</option>
+              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
+              <option value="H2200">H2200 · 전략추진실</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>TO G/L계정</label>
+            <select id="ats-to-gl">
               <option value="343006">343006 · 광고선전비(컨텐츠)</option>
               <option value="343002">343002 · 광고선전비(조사연구)</option>
             </select>
@@ -846,16 +872,33 @@
         <div class="sap-title">⚙️ SAP 연동 설정 (예산품의)</div>
         <div class="form-row">
           <div class="field">
-            <label>코스트센터</label>
-            <select id="sv-cc">
+            <label>FROM 코스트센터</label>
+            <select id="sv-from-cc">
               <option value="M2010">M2010 · 잡코리아마케팅팀</option>
               <option value="H2200">H2200 · 전략추진실</option>
               <option value="D2034">D2034 · ATS운영팀(마케팅)</option>
             </select>
           </div>
           <div class="field">
-            <label>G/L계정</label>
-            <select id="sv-gl">
+            <label>FROM G/L계정</label>
+            <select id="sv-from-gl">
+              <option value="343002">343002 · 광고선전비(조사연구)</option>
+              <option value="343006">343006 · 광고선전비(컨텐츠)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>TO 코스트센터</label>
+            <select id="sv-to-cc">
+              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
+              <option value="H2200">H2200 · 전략추진실</option>
+              <option value="D2034">D2034 · ATS운영팀(마케팅)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>TO G/L계정</label>
+            <select id="sv-to-gl">
               <option value="343002">343002 · 광고선전비(조사연구)</option>
               <option value="343006">343006 · 광고선전비(컨텐츠)</option>
             </select>
@@ -1143,7 +1186,9 @@ function getArgs(tab) {
     args.rate30   = document.getElementById('iv-rate30').value;
     args.rate60   = document.getElementById('iv-rate60').value;
     args.from_cc  = document.getElementById('iv-from-cc').value;
+    args.from_gl  = document.getElementById('iv-from-gl').value;
     args.to_cc    = document.getElementById('iv-to-cc').value;
+    args.to_gl    = document.getElementById('iv-to-gl').value;
     args.type_sap = document.getElementById('iv-type-sap').value;
   }
   else if (tab === 'freelance') {
@@ -1173,8 +1218,10 @@ function getArgs(tab) {
     args.sq     = document.getElementById('ats-sq').value;
     args.nprice = document.getElementById('ats-nprice').value;
     args.sprice = document.getElementById('ats-sprice').value;
-    args.cc     = document.getElementById('ats-cc').value;
-    args.gl     = document.getElementById('ats-gl').value;
+    args.from_cc = document.getElementById('ats-from-cc').value;
+    args.from_gl = document.getElementById('ats-from-gl').value;
+    args.to_cc   = document.getElementById('ats-to-cc').value;
+    args.to_gl   = document.getElementById('ats-to-gl').value;
     if (type === 'p') args.parent = document.getElementById('ats-parent')?.value;
   }
   else if (tab === 'survey') {
@@ -1185,8 +1232,10 @@ function getArgs(tab) {
       const mode = document.getElementById('sv-mode').value;
       if (mode === 'single') args.mon = document.getElementById('sv-mon').value;
       else if (mode === 'multi') args.months = document.getElementById('sv-months').value;
-      args.cc = document.getElementById('sv-cc').value;
-      args.gl = document.getElementById('sv-gl').value;
+      args.from_cc = document.getElementById('sv-from-cc').value;
+      args.from_gl = document.getElementById('sv-from-gl').value;
+      args.to_cc   = document.getElementById('sv-to-cc').value;
+      args.to_gl   = document.getElementById('sv-to-gl').value;
       const files = getFilePaths('svb');
       if (files.length) args.files = files.join(',');
     } else {
