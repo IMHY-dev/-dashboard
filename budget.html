@@ -389,6 +389,26 @@
 
   .parent-doc-field label { color: #a89fff; }
 
+  .sap-section {
+    background: rgba(38,208,206,0.04);
+    border: 1px solid rgba(38,208,206,0.15);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .sap-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--teal);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
   @media (max-width: 600px) {
     .form-row { grid-template-columns: 1fr; }
     .form-row.triple { grid-template-columns: 1fr 1fr; }
@@ -477,6 +497,44 @@
         <div class="field">
           <label>총액 (자동계산)</label>
           <input type="text" id="iv-total" readonly style="color: var(--green); font-weight: 700;">
+        </div>
+      </div>
+
+      <div class="sap-section">
+        <div class="sap-title">⚙️ SAP 연동 설정</div>
+        <div class="form-row">
+          <div class="field">
+            <label>FROM 코스트센터</label>
+            <select id="iv-from-cc">
+              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
+              <option value="H2200">H2200 · 전략추진실</option>
+              <option value="D2034">D2034 · ATS운영팀(마케팅)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>TO 코스트센터</label>
+            <select id="iv-to-cc">
+              <option value="H2200">H2200 · 전략추진실</option>
+              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
+              <option value="D2034">D2034 · ATS운영팀(마케팅)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>G/L계정</label>
+            <select id="iv-gl">
+              <option value="343002">343002 · 광고선전비(조사연구)</option>
+              <option value="343006">343006 · 광고선전비(컨텐츠)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>구분</label>
+            <select id="iv-type-sap">
+              <option value="전용">전용</option>
+              <option value="LE확인">LE확인</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -661,6 +719,27 @@
         </div>
       </div>
 
+      <div class="sap-section">
+        <div class="sap-title">⚙️ SAP 연동 설정</div>
+        <div class="form-row">
+          <div class="field">
+            <label>코스트센터</label>
+            <select id="ats-cc">
+              <option value="D2034">D2034 · ATS운영팀(마케팅)(배부용)</option>
+              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
+              <option value="H2200">H2200 · 전략추진실</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>G/L계정</label>
+            <select id="ats-gl">
+              <option value="343006">343006 · 광고선전비(컨텐츠)</option>
+              <option value="343002">343002 · 광고선전비(조사연구)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div class="btn-row">
         <button class="generate-btn" onclick="generate('ats')">명령어 미리보기</button>
         <button class="run-btn" id="run-ats" onclick="runDoc('ats')">🚀 문건등록</button>
@@ -760,6 +839,27 @@
             <div class="file-drop-text">클릭하거나 파일을 드래그하세요<br><strong>PDF, DOC, ZIP, XLS</strong> 지원</div>
           </div>
           <div class="file-list" id="svp-file-list"></div>
+        </div>
+      </div>
+
+      <div id="survey-b-sap" class="sap-section">
+        <div class="sap-title">⚙️ SAP 연동 설정 (예산품의)</div>
+        <div class="form-row">
+          <div class="field">
+            <label>코스트센터</label>
+            <select id="sv-cc">
+              <option value="M2010">M2010 · 잡코리아마케팅팀</option>
+              <option value="H2200">H2200 · 전략추진실</option>
+              <option value="D2034">D2034 · ATS운영팀(마케팅)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>G/L계정</label>
+            <select id="sv-gl">
+              <option value="343002">343002 · 광고선전비(조사연구)</option>
+              <option value="343006">343006 · 광고선전비(컨텐츠)</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -1042,6 +1142,9 @@ function getArgs(tab) {
     args.n60      = document.getElementById('iv-n60').value;
     args.rate30   = document.getElementById('iv-rate30').value;
     args.rate60   = document.getElementById('iv-rate60').value;
+    args.from_cc  = document.getElementById('iv-from-cc').value;
+    args.to_cc    = document.getElementById('iv-to-cc').value;
+    args.type_sap = document.getElementById('iv-type-sap').value;
   }
   else if (tab === 'freelance') {
     if (type === 'b') {
@@ -1070,6 +1173,8 @@ function getArgs(tab) {
     args.sq     = document.getElementById('ats-sq').value;
     args.nprice = document.getElementById('ats-nprice').value;
     args.sprice = document.getElementById('ats-sprice').value;
+    args.cc     = document.getElementById('ats-cc').value;
+    args.gl     = document.getElementById('ats-gl').value;
     if (type === 'p') args.parent = document.getElementById('ats-parent')?.value;
   }
   else if (tab === 'survey') {
@@ -1080,6 +1185,8 @@ function getArgs(tab) {
       const mode = document.getElementById('sv-mode').value;
       if (mode === 'single') args.mon = document.getElementById('sv-mon').value;
       else if (mode === 'multi') args.months = document.getElementById('sv-months').value;
+      args.cc = document.getElementById('sv-cc').value;
+      args.gl = document.getElementById('sv-gl').value;
       const files = getFilePaths('svb');
       if (files.length) args.files = files.join(',');
     } else {
