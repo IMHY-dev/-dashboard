@@ -405,8 +405,8 @@
 
   <!-- Result -->
   <div class="card" id="result-card">
-    <div class="result-icon">✅</div>
-    <p class="result-title">번역 완료!</p>
+    <div class="result-icon" id="result-icon">✅</div>
+    <p class="result-title" id="result-title">번역 완료!</p>
     <p class="result-sub" id="result-sub"></p>
     <div class="download-row">
       <button class="dl-btn primary"   id="dl-pptx">PPT 다운로드</button>
@@ -420,6 +420,7 @@
   let selectedFile = null;
   let selectedDir  = "ko_to_en";
   let overflowCount = 0;
+  let integrationErrors = 0;
   // 중복 슬라이드 pill 방지
   const overflowSlides = new Set();
 
@@ -497,7 +498,7 @@
 
     // Reset
     hideError();
-    overflowCount = 0; overflowSlides.clear();
+    overflowCount = 0; overflowSlides.clear(); integrationErrors = 0;
     slidePills.innerHTML = "";
     overflowCard.style.display    = "none";
     integrationCard.style.display = "none";
@@ -564,6 +565,7 @@
         const msg = ev.step === "sharepoint" ? spMsg  : slMsg;
         el.className    = `step-item ${ev.status}`;
         msg.textContent = ev.message || (ev.status === "running" ? "처리 중..." : "");
+        if (ev.status === "error") integrationErrors++;
       }
 
       if (ev.type === "done") {
@@ -573,6 +575,20 @@
         const dirLabel = selectedDir === "ko_to_en" ? "한 → 영" : "영 → 한";
         resultSub.textContent     = `${selectedFile.name} · ${dirLabel} · 초과 ${overflowCount}개`;
         resultCard.style.display  = "block";
+
+        // 연동 에러가 있으면 경고, 없으면 완료
+        const resultIcon  = document.getElementById("result-icon");
+        const resultTitle = document.getElementById("result-title");
+        if (integrationErrors > 0) {
+          resultIcon.textContent  = "⚠️";
+          resultTitle.textContent = "번역 완료 (연동 실패)";
+          resultTitle.style.color = "var(--warning)";
+        } else {
+          resultIcon.textContent  = "✅";
+          resultTitle.textContent = "번역 완료!";
+          resultTitle.style.color = "";
+        }
+
         dlPptx.onclick            = () => window.location.href = `/download/pptx/${jobId}`;
         dlReport.style.display    = ev.has_report ? "" : "none";
         dlReport.onclick          = () => window.location.href = `/download/report/${jobId}`;

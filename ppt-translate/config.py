@@ -5,9 +5,15 @@ config.py — 전역 설정
 
 import os
 
+# .env 파일 자동 로드
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # ─── API ───────────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = "claude-sonnet-4-6"
 
 # ─── 번역 설정 ─────────────────────────────────────────────────────────────────
 TARGET_LANGUAGE = "en"          # "en" 또는 "ko"
