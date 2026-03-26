@@ -1,3 +1,9 @@
 node_modules/
 .env
 error_screenshot.png
+.next/
+meeting-notes/output/
+meeting-notes/input/*.txt
+ppt-translate/output/
+__pycache__/
+*.pyc
