@@ -322,16 +322,59 @@ function ExecutionLog({ steps, outputFile }: { steps: ExecutionStep[]; outputFil
   );
 }
 
-function SkillCard({ name, ready, command }: { name: string; ready: boolean; command: string }) {
+function SkillCard({ name, ready, command, onRun }: { name: string; ready: boolean; command: string; onRun?: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleRun = async () => {
+    if (!ready || running) return;
+    setRunning(true);
+    setResult(null);
+
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: name }),
+      });
+      const data = await res.json();
+      setResult({
+        success: data.success,
+        message: data.success
+          ? `완료! ${data.outputPath ? `→ ${data.outputPath}` : ""}`
+          : `오류: ${(data.stderr || data.error || "").slice(0, 150)}`,
+      });
+      if (onRun) onRun();
+    } catch (err) {
+      setResult({ success: false, message: `서버 연결 실패: ${err}` });
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
-    <div className={`p-4 rounded-xl border transition-all hover:scale-[1.02] ${ready ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
+    <div className={`p-4 rounded-xl border transition-all ${ready ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
       <div className="flex items-center justify-between mb-2">
         <span className="font-medium text-sm">{name}</span>
         <span className={`text-xs ${ready ? "text-green-400" : "text-red-400"}`}>
           {ready ? "✅ 구현됨" : "❌ 미구현"}
         </span>
       </div>
-      <code className="text-xs text-gray-400 block truncate">{command}</code>
+      <code className="text-xs text-gray-400 block truncate mb-3">{command}</code>
+      {ready && (
+        <button
+          onClick={handleRun}
+          disabled={running}
+          className={`w-full px-3 py-1.5 rounded text-xs font-medium transition-all ${running ? "bg-gray-700 text-gray-400 cursor-wait" : "text-black hover:opacity-80"}`}
+          style={running ? {} : { background: "var(--accent)" }}>
+          {running ? "⏳ 실행 중..." : "▶ 실행"}
+        </button>
+      )}
+      {result && (
+        <div className={`mt-2 p-2 rounded text-xs ${result.success ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+          {result.message}
+        </div>
+      )}
     </div>
   );
 }
@@ -496,49 +539,72 @@ export default function Dashboard() {
     setTasks(tasks.filter((t) => t.id !== id));
   };
 
-  const runTask = (id: string) => {
+  const runTask = async (id: string) => {
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
     const matched = matchCategory(task.message);
     const steps: ExecutionStep[] = matched.steps.map((label) => ({ label, status: "pending" }));
 
-    setTasks(tasks.map((t) =>
-      t.id === id ? { ...t, status: "running" as TaskStatus, executionSteps: steps } : t
-    ));
+    // 1. 실행 상태로 전환 + 첫 번째 스텝 running
+    const initialSteps = steps.map((s, i) => ({
+      ...s,
+      status: i === 0 ? "running" as const : "pending" as const,
+    }));
+    setTasks((prev) =>
+      prev.map((t) => t.id === id ? { ...t, status: "running" as TaskStatus, executionSteps: initialSteps } : t)
+    );
 
-    steps.forEach((_, i) => {
-      setTimeout(() => {
+    try {
+      // 2. 실제 API 호출
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: task.category }),
+      });
+      const result = await res.json();
+
+      if (result.success) {
+        // 3. 성공: 모든 스텝 done + 결과물 경로
+        const doneSteps = steps.map((s) => ({ ...s, status: "done" as const }));
         setTasks((prev) =>
-          prev.map((t) => {
-            if (t.id !== id || !t.executionSteps) return t;
-            const updated = t.executionSteps.map((s, j) => ({
-              ...s,
-              status: j < i ? "done" as const : j === i ? "running" as const : "pending" as const,
-            }));
-            return { ...t, executionSteps: updated };
-          })
+          prev.map((t) =>
+            t.id === id
+              ? { ...t, status: "done" as TaskStatus, executionSteps: doneSteps, outputFile: result.outputPath }
+              : t
+          )
         );
-      }, (i + 1) * 1200);
-    });
-
-    setTimeout(() => {
+      } else {
+        // 4. 실패: 에러 표시
+        const errorSteps = steps.map((s, i) => ({
+          ...s,
+          status: i === 0 ? "error" as const : "pending" as const,
+        }));
+        // 에러 상세 정보를 마지막 스텝으로 추가
+        errorSteps.push({
+          label: `오류: ${result.stderr?.slice(0, 200) || result.error || "알 수 없는 오류"}`,
+          status: "error" as const,
+        });
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === id
+              ? { ...t, status: "in_progress" as TaskStatus, executionSteps: errorSteps }
+              : t
+          )
+        );
+      }
+    } catch (err) {
+      // 5. 네트워크 오류
+      const errorSteps: ExecutionStep[] = [
+        { label: `서버 연결 실패: ${err}`, status: "error" as const },
+      ];
       setTasks((prev) =>
-        prev.map((t) => {
-          if (t.id !== id || !t.executionSteps) return t;
-          const done = t.executionSteps.map((s) => ({ ...s, status: "done" as const }));
-          const outputFile = task.category === "장표 번역"
-            ? "ppt-translate/output/translated.pptx"
-            : task.category === "Macro 분석"
-            ? "output/Macro_Analysis_updated.xlsx"
-            : task.category === "Placement 분석"
-            ? "output/26Q1_Placement_Summary.pptx"
-            : task.category === "회의록 생성"
-            ? "meeting-notes/output/summary.json"
-            : undefined;
-          return { ...t, status: "done" as TaskStatus, executionSteps: done, outputFile };
-        })
+        prev.map((t) =>
+          t.id === id
+            ? { ...t, status: "in_progress" as TaskStatus, executionSteps: errorSteps }
+            : t
+        )
       );
-    }, (steps.length + 1) * 1200);
+    }
   };
 
   const handleMeetingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -744,8 +810,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-3 gap-3">
             <SkillCard name="예산·구매 품의" ready={true} command="node fill.js" />
             <SkillCard name="장표 번역" ready={true} command="python translate.py" />
-            <SkillCard name="Macro 업데이트" ready={true} command="python update_macro.py" />
-            <SkillCard name="회의록 정리" ready={true} command="python summarize.py" />
+            <SkillCard name="Macro 분석" ready={true} command="python update_macro.py" />
+            <SkillCard name="회의록 생성" ready={true} command="python summarize.py" />
             <SkillCard name="장표 제작" ready={false} command="Claude/Genspark (미구현)" />
             <SkillCard name="Placement 분석" ready={false} command="run_jk → calc_rms → gen_ppt (미구현)" />
           </div>
