@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── 타입 ───
-type TaskStatus = "pending" | "in_progress" | "running" | "done";
+type TaskStatus = "pending" | "in_progress" | "done";
 type AutoLevel = "auto" | "manual" | "knowledge";
-type TabType = "tasks" | "calendar" | "meeting" | "knowledge";
+type TabType = "tasks" | "meeting" | "knowledge";
 
 function calcDday(deadline: string): string | null {
   if (!deadline || deadline === "미정") return null;
@@ -30,6 +30,7 @@ interface Task {
   to: string;
   message: string;
   category: string;
+  startDate: string;
   deadline: string;
   status: TaskStatus;
   autoLevel: AutoLevel;
@@ -256,10 +257,9 @@ function StatusBadge({ status }: { status: TaskStatus }) {
   const styles = {
     pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
     in_progress: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    running: "bg-purple-500/20 text-purple-400 border-purple-500/30",
     done: "bg-green-500/20 text-green-400 border-green-500/30",
   };
-  const labels = { pending: "대기", in_progress: "진행 중", running: "실행 중", done: "완료" };
+  const labels = { pending: "대기", in_progress: "진행 중", done: "완료" };
   return (
     <span className={`px-2 py-0.5 text-xs rounded border ${styles[status]}`}>
       {labels[status]}
@@ -458,8 +458,9 @@ export default function Dashboard() {
   const [newMessage, setNewMessage] = useState("");
   const [newFrom, setNewFrom] = useState("");
   const [newTo, setNewTo] = useState("주호연");
+  const [newStartDate, setNewStartDate] = useState("");
   const [newDeadline, setNewDeadline] = useState("");
-  const [filter, setFilter] = useState<"all" | "pending" | "in_progress" | "running" | "done">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "in_progress" | "done">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<TabType>("tasks");
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
@@ -474,7 +475,7 @@ export default function Dashboard() {
       const res = await fetch("/api/tasks");
       const data = await res.json();
       if (!data.tasks) return;
-      const apiTasks: Task[] = data.tasks.map((t: { id: string; from: string; to: string; message: string; channel: string; timestamp: string; deadline?: string; status?: TaskStatus }) => {
+      const apiTasks: Task[] = data.tasks.map((t: { id: string; from: string; to: string; message: string; channel: string; timestamp: string; startDate?: string; deadline?: string; status?: TaskStatus }) => {
         const matched = matchCategory(t.message);
         return {
           id: t.id,
@@ -482,8 +483,9 @@ export default function Dashboard() {
           to: t.to,
           message: t.message,
           category: matched.category,
+          startDate: t.startDate || "",
           deadline: t.deadline || "미정",
-          status: t.status || "pending" as TaskStatus,
+          status: (t.status === "running" ? "in_progress" : t.status) || "pending" as TaskStatus,
           autoLevel: matched.autoLevel,
           guide: matched.guide,
           channel: t.channel,
@@ -517,6 +519,7 @@ export default function Dashboard() {
       to: newTo,
       message: newMessage,
       category: matched.category,
+      startDate: newStartDate || "",
       deadline: newDeadline || "미정",
       status: "pending",
       autoLevel: matched.autoLevel,
@@ -527,6 +530,7 @@ export default function Dashboard() {
     setTasks([task, ...tasks]);
     setNewMessage("");
     setNewFrom("");
+    setNewStartDate("");
     setNewDeadline("");
     // GitHub에도 저장
     fetch("/api/tasks", {
@@ -669,14 +673,14 @@ export default function Dashboard() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const assignees = ["all", ...Array.from(new Set(tasks.map((t) => t.to))).sort()];
+  const ASSIGNEES = ["all", "주호연", "임성욱", "임한솔"] as const;
   const filtered = tasks
     .filter((t) => filter === "all" || t.status === filter)
     .filter((t) => assigneeFilter === "all" || t.to === assigneeFilter);
   const stats = {
     total: tasks.length,
     pending: tasks.filter((t) => t.status === "pending").length,
-    active: tasks.filter((t) => t.status === "in_progress" || t.status === "running").length,
+    active: tasks.filter((t) => t.status === "in_progress").length,
     done: tasks.filter((t) => t.status === "done").length,
   };
 
@@ -711,7 +715,6 @@ export default function Dashboard() {
       <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: "var(--surface)" }}>
         {([
           { key: "tasks", label: "📋 업무 관리", count: stats.total },
-          { key: "calendar", label: "📅 캘린더", count: null },
           { key: "meeting", label: "🎙️ 회의록", count: meetings.length },
           { key: "knowledge", label: "📚 지식 베이스", count: KNOWLEDGE_BASE.length },
         ] as { key: TabType; label: string; count: number | null }[]).map((tab) => (
@@ -734,9 +737,16 @@ export default function Dashboard() {
                 placeholder="보내는 사람"
                 className="w-36 px-3 py-2 rounded-lg text-sm bg-black border border-gray-700 text-white placeholder-gray-500" />
               <span className="py-2 text-gray-500">→</span>
-              <input value={newTo} onChange={(e) => setNewTo(e.target.value)}
-                placeholder="받는 사람"
-                className="w-36 px-3 py-2 rounded-lg text-sm bg-black border border-gray-700 text-white placeholder-gray-500" />
+              <select value={newTo} onChange={(e) => setNewTo(e.target.value)}
+                className="w-28 px-3 py-2 rounded-lg text-sm bg-black border border-gray-700 text-white">
+                <option value="주호연">주호연</option>
+                <option value="임성욱">임성욱</option>
+                <option value="임한솔">임한솔</option>
+              </select>
+              <span className="py-2 text-gray-500 text-xs">시작</span>
+              <input type="date" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)}
+                className="px-3 py-2 rounded-lg text-sm bg-black border border-gray-700 text-white" />
+              <span className="py-2 text-gray-500 text-xs">마감</span>
               <input type="date" value={newDeadline} onChange={(e) => setNewDeadline(e.target.value)}
                 className="px-3 py-2 rounded-lg text-sm bg-black border border-gray-700 text-white" />
             </div>
@@ -758,16 +768,16 @@ export default function Dashboard() {
 
           {/* 필터 */}
           <div className="flex gap-2 mb-2 flex-wrap">
-            {(["all", "pending", "in_progress", "running", "done"] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)}
+            {(["all", "pending", "done"] as const).map((f) => (
+              <button key={f} onClick={() => setFilter(f as typeof filter)}
                 className={`px-3 py-1 rounded-lg text-xs transition-all ${filter === f ? "text-black" : "text-gray-400"}`}
                 style={{ background: filter === f ? "var(--accent)" : "var(--surface)", border: "1px solid var(--border)" }}>
-                {{ all: "전체", pending: "대기", in_progress: "진행 중", running: "실행 중", done: "완료" }[f]}
+                {{ all: "전체", pending: "대기", done: "완료" }[f]}
               </button>
             ))}
           </div>
           <div className="flex gap-2 mb-4 flex-wrap">
-            {assignees.map((a) => (
+            {ASSIGNEES.map((a) => (
               <button key={a} onClick={() => setAssigneeFilter(a)}
                 className={`px-3 py-1 rounded-lg text-xs transition-all ${assigneeFilter === a ? "text-black" : "text-gray-400"}`}
                 style={{ background: assigneeFilter === a ? "#6366f1" : "var(--surface)", border: "1px solid var(--border)" }}>
@@ -799,7 +809,9 @@ export default function Dashboard() {
                       const ddayColor = !dday ? "var(--text-muted)" : dday === "D-day" ? "#f59e0b" : dday.startsWith("D+") ? "#ef4444" : parseInt(dday.replace("D-","")) <= 3 ? "#f97316" : "var(--text-muted)";
                       return (
                         <span className="text-xs flex items-center gap-1">
-                          <span style={{ color: "var(--text-muted)" }}>~{task.deadline}</span>
+                          {task.startDate && <span style={{ color: "var(--text-muted)" }}>{task.startDate}</span>}
+                          {task.startDate && <span style={{ color: "var(--text-muted)" }}>~</span>}
+                          <span style={{ color: "var(--text-muted)" }}>{task.deadline}</span>
                           {dday && <span className="px-1.5 py-0.5 rounded text-xs font-bold" style={{ color: ddayColor, background: `${ddayColor}22` }}>{dday}</span>}
                         </span>
                       );
@@ -883,6 +895,81 @@ export default function Dashboard() {
               );
             })}
           </div>
+
+          {/* ─── 캘린더 (인라인) ─── */}
+          {(() => {
+            const { year, month } = calMonth;
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const todayStr = new Date().toISOString().split("T")[0];
+            const weeks: (number | null)[][] = [];
+            let day = 1 - firstDay;
+            while (day <= daysInMonth) {
+              const week: (number | null)[] = [];
+              for (let d = 0; d < 7; d++, day++) week.push(day >= 1 && day <= daysInMonth ? day : null);
+              weeks.push(week);
+            }
+            const tasksByDate: Record<string, Task[]> = {};
+            tasks.forEach((t) => {
+              if (t.deadline && t.deadline !== "미정") {
+                if (!tasksByDate[t.deadline]) tasksByDate[t.deadline] = [];
+                tasksByDate[t.deadline].push(t);
+              }
+            });
+            const monthNames = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+            return (
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>📅 캘린더</h2>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setCalMonth(({ year: y, month: m }) => m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 })}
+                      className="px-2 py-0.5 rounded text-xs text-gray-400 hover:text-white transition-all"
+                      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>◀</button>
+                    <span className="text-sm font-semibold">{year}년 {monthNames[month]}</span>
+                    <button onClick={() => setCalMonth(({ year: y, month: m }) => m === 11 ? { year: y + 1, month: 0 } : { year: y, month: m + 1 })}
+                      className="px-2 py-0.5 rounded text-xs text-gray-400 hover:text-white transition-all"
+                      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>▶</button>
+                  </div>
+                </div>
+                <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+                  <div className="grid grid-cols-7 text-center text-xs font-medium py-2" style={{ background: "var(--surface)" }}>
+                    {["일","월","화","수","목","금","토"].map((d, i) => (
+                      <div key={d} className={i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}>{d}</div>
+                    ))}
+                  </div>
+                  {weeks.map((week, wi) => (
+                    <div key={wi} className="grid grid-cols-7" style={{ borderTop: "1px solid var(--border)" }}>
+                      {week.map((d, di) => {
+                        const dateStr = d ? `${year}-${String(month + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}` : "";
+                        const dayTasks = d ? (tasksByDate[dateStr] || []) : [];
+                        const isToday = dateStr === todayStr;
+                        return (
+                          <div key={di} className="min-h-[72px] p-1 text-xs"
+                            style={{ borderLeft: di > 0 ? "1px solid var(--border)" : undefined, background: isToday ? "#ffffff08" : undefined }}>
+                            {d && (
+                              <>
+                                <div className={`font-medium mb-1 w-5 h-5 flex items-center justify-center rounded-full text-xs ${isToday ? "text-black font-bold" : di === 0 ? "text-red-400" : di === 6 ? "text-blue-400" : "text-gray-400"}`}
+                                  style={isToday ? { background: "var(--accent)" } : undefined}>{d}</div>
+                                <div className="space-y-0.5">
+                                  {dayTasks.slice(0, 2).map((t) => (
+                                    <div key={t.id} className="truncate px-1 py-0.5 rounded leading-tight"
+                                      style={{ background: t.status === "done" ? "#16a34a22" : t.status === "in_progress" ? "#2563eb22" : "#f59e0b22", color: t.status === "done" ? "#4ade80" : t.status === "in_progress" ? "#60a5fa" : "#fbbf24", fontSize: "10px" }}>
+                                      {t.to} · {t.message.slice(0, 8)}
+                                    </div>
+                                  ))}
+                                  {dayTasks.length > 2 && <div className="text-gray-500 pl-1" style={{ fontSize: "10px" }}>+{dayTasks.length - 2}</div>}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 자동 처리 Skill 현황 */}
           <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>⚡ 에이전트 현황 (6개 중 4개 구현)</h2>
