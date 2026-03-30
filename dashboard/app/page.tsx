@@ -5,7 +5,19 @@ import { useState, useRef, useEffect, useCallback } from "react";
 // ─── 타입 ───
 type TaskStatus = "pending" | "in_progress" | "running" | "done";
 type AutoLevel = "auto" | "manual" | "knowledge";
-type TabType = "tasks" | "meeting" | "knowledge";
+type TabType = "tasks" | "calendar" | "meeting" | "knowledge";
+
+function calcDday(deadline: string): string | null {
+  if (!deadline || deadline === "미정") return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(deadline);
+  due.setHours(0, 0, 0, 0);
+  const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return "D-day";
+  if (diff > 0) return `D-${diff}`;
+  return `D+${Math.abs(diff)}`;
+}
 
 interface ExecutionStep {
   label: string;
@@ -448,7 +460,9 @@ export default function Dashboard() {
   const [newTo, setNewTo] = useState("주호연");
   const [newDeadline, setNewDeadline] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "in_progress" | "running" | "done">("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<TabType>("tasks");
+  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -655,7 +669,10 @@ export default function Dashboard() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const filtered = filter === "all" ? tasks : tasks.filter((t) => t.status === filter);
+  const assignees = ["all", ...Array.from(new Set(tasks.map((t) => t.to))).sort()];
+  const filtered = tasks
+    .filter((t) => filter === "all" || t.status === filter)
+    .filter((t) => assigneeFilter === "all" || t.to === assigneeFilter);
   const stats = {
     total: tasks.length,
     pending: tasks.filter((t) => t.status === "pending").length,
@@ -694,13 +711,14 @@ export default function Dashboard() {
       <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: "var(--surface)" }}>
         {([
           { key: "tasks", label: "📋 업무 관리", count: stats.total },
+          { key: "calendar", label: "📅 캘린더", count: null },
           { key: "meeting", label: "🎙️ 회의록", count: meetings.length },
           { key: "knowledge", label: "📚 지식 베이스", count: KNOWLEDGE_BASE.length },
-        ] as { key: TabType; label: string; count: number }[]).map((tab) => (
+        ] as { key: TabType; label: string; count: number | null }[]).map((tab) => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key ? "text-black" : "text-gray-400 hover:text-gray-300"}`}
             style={{ background: activeTab === tab.key ? "var(--accent)" : "transparent" }}>
-            {tab.label} ({tab.count})
+            {tab.label}{tab.count !== null ? ` (${tab.count})` : ""}
           </button>
         ))}
       </div>
@@ -739,12 +757,21 @@ export default function Dashboard() {
           </div>
 
           {/* 필터 */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-2 flex-wrap">
             {(["all", "pending", "in_progress", "running", "done"] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)}
                 className={`px-3 py-1 rounded-lg text-xs transition-all ${filter === f ? "text-black" : "text-gray-400"}`}
                 style={{ background: filter === f ? "var(--accent)" : "var(--surface)", border: "1px solid var(--border)" }}>
                 {{ all: "전체", pending: "대기", in_progress: "진행 중", running: "실행 중", done: "완료" }[f]}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 mb-4 flex-wrap">
+            {assignees.map((a) => (
+              <button key={a} onClick={() => setAssigneeFilter(a)}
+                className={`px-3 py-1 rounded-lg text-xs transition-all ${assigneeFilter === a ? "text-black" : "text-gray-400"}`}
+                style={{ background: assigneeFilter === a ? "#6366f1" : "var(--surface)", border: "1px solid var(--border)" }}>
+                {a === "all" ? "전원" : a}
               </button>
             ))}
           </div>
@@ -767,7 +794,16 @@ export default function Dashboard() {
                     <span className="text-sm font-medium">{task.category}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!isEditing && <span className="text-xs" style={{ color: "var(--text-muted)" }}>~{task.deadline}</span>}
+                    {!isEditing && (() => {
+                      const dday = calcDday(task.deadline);
+                      const ddayColor = !dday ? "var(--text-muted)" : dday === "D-day" ? "#f59e0b" : dday.startsWith("D+") ? "#ef4444" : parseInt(dday.replace("D-","")) <= 3 ? "#f97316" : "var(--text-muted)";
+                      return (
+                        <span className="text-xs flex items-center gap-1">
+                          <span style={{ color: "var(--text-muted)" }}>~{task.deadline}</span>
+                          {dday && <span className="px-1.5 py-0.5 rounded text-xs font-bold" style={{ color: ddayColor, background: `${ddayColor}22` }}>{dday}</span>}
+                        </span>
+                      );
+                    })()}
                     <button onClick={() => isEditing ? setEditingId(null) : startEdit(task)}
                       className="text-xs px-2 py-0.5 rounded border border-gray-700 text-gray-400 hover:text-white transition-all">
                       {isEditing ? "취소" : "✏️"}
@@ -973,6 +1009,110 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ─── 탭: 캘린더 ─── */}
+      {activeTab === "calendar" && (() => {
+        const { year, month } = calMonth;
+        const firstDay = new Date(year, month, 1).getDay(); // 0=일
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const todayStr = new Date().toISOString().split("T")[0];
+        const weeks: (number | null)[][] = [];
+        let day = 1 - firstDay;
+        while (day <= daysInMonth) {
+          const week: (number | null)[] = [];
+          for (let d = 0; d < 7; d++, day++) week.push(day >= 1 && day <= daysInMonth ? day : null);
+          weeks.push(week);
+        }
+        const tasksByDate: Record<string, Task[]> = {};
+        tasks.forEach((t) => {
+          if (t.deadline && t.deadline !== "미정") {
+            if (!tasksByDate[t.deadline]) tasksByDate[t.deadline] = [];
+            tasksByDate[t.deadline].push(t);
+          }
+        });
+        const monthNames = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={() => setCalMonth(({ year: y, month: m }) => m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 })}
+                className="px-3 py-1 rounded-lg text-sm text-gray-400 hover:text-white transition-all"
+                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>◀</button>
+              <span className="font-semibold text-base">{year}년 {monthNames[month]}</span>
+              <button onClick={() => setCalMonth(({ year: y, month: m }) => m === 11 ? { year: y + 1, month: 0 } : { year: y, month: m + 1 })}
+                className="px-3 py-1 rounded-lg text-sm text-gray-400 hover:text-white transition-all"
+                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>▶</button>
+            </div>
+            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+              <div className="grid grid-cols-7 text-center text-xs font-medium py-2" style={{ background: "var(--surface)" }}>
+                {["일","월","화","수","목","금","토"].map((d, i) => (
+                  <div key={d} className={i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}>{d}</div>
+                ))}
+              </div>
+              {weeks.map((week, wi) => (
+                <div key={wi} className="grid grid-cols-7" style={{ borderTop: "1px solid var(--border)" }}>
+                  {week.map((d, di) => {
+                    const dateStr = d ? `${year}-${String(month + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}` : "";
+                    const dayTasks = d ? (tasksByDate[dateStr] || []) : [];
+                    const isToday = dateStr === todayStr;
+                    return (
+                      <div key={di} className="min-h-[80px] p-1.5 text-xs"
+                        style={{ borderLeft: di > 0 ? "1px solid var(--border)" : undefined, background: isToday ? "var(--accent)11" : undefined }}>
+                        {d && (
+                          <>
+                            <div className={`font-medium mb-1 w-5 h-5 flex items-center justify-center rounded-full ${isToday ? "text-black font-bold" : di === 0 ? "text-red-400" : di === 6 ? "text-blue-400" : "text-gray-300"}`}
+                              style={isToday ? { background: "var(--accent)" } : undefined}>{d}</div>
+                            <div className="space-y-0.5">
+                              {dayTasks.slice(0, 3).map((t) => (
+                                <div key={t.id} className="truncate px-1 py-0.5 rounded text-xs leading-tight"
+                                  style={{ background: t.status === "done" ? "#16a34a22" : t.status === "in_progress" ? "#2563eb22" : "#f59e0b22", color: t.status === "done" ? "#4ade80" : t.status === "in_progress" ? "#60a5fa" : "#fbbf24" }}>
+                                  {t.to} · {t.message.slice(0, 10)}
+                                </div>
+                              ))}
+                              {dayTasks.length > 3 && <div className="text-gray-500 text-xs pl-1">+{dayTasks.length - 3}개</div>}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            {/* 마감 임박 목록 */}
+            {(() => {
+              const upcoming = tasks
+                .filter((t) => t.deadline && t.deadline !== "미정" && t.status !== "done")
+                .sort((a, b) => a.deadline.localeCompare(b.deadline))
+                .slice(0, 10);
+              if (upcoming.length === 0) return null;
+              return (
+                <div className="mt-6">
+                  <div className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>⏰ 마감 임박 업무</div>
+                  <div className="space-y-2">
+                    {upcoming.map((t) => {
+                      const dday = calcDday(t.deadline);
+                      const ddayColor = !dday ? "var(--text-muted)" : dday === "D-day" ? "#f59e0b" : dday.startsWith("D+") ? "#ef4444" : parseInt(dday.replace("D-","")) <= 3 ? "#f97316" : "#9ca3af";
+                      return (
+                        <div key={t.id} className="flex items-center justify-between p-3 rounded-xl text-sm"
+                          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <StatusBadge status={t.status} />
+                            <span className="truncate">{t.message}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-3">
+                            <span className="text-xs text-gray-400">{t.to}</span>
+                            {dday && <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ color: ddayColor, background: `${ddayColor}22` }}>{dday}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
 
       {/* ─── 탭: 지식 베이스 ─── */}
       {activeTab === "knowledge" && (
