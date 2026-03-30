@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
     to: mentioned.name,
     message: cleanMessage,
     channel: channelName,
-    timestamp: new Date(parseFloat(ts) * 1000).toLocaleString("ko-KR"),
+    timestamp: new Date(parseFloat(ts) * 1000).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
     deadline: parseDeadline(text) ?? "미정",
     status: "pending" as const,
     slackTs: ts,

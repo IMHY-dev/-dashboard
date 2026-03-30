@@ -467,7 +467,7 @@ export default function Dashboard() {
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ from: string; to: string; message: string; deadline: string }>({ from: "", to: "", message: "", deadline: "" });
+  const [editDraft, setEditDraft] = useState<{ from: string; to: string; message: string; startDate: string; deadline: string }>({ from: "", to: "", message: "", startDate: "", deadline: "" });
 
   // GitHub DB에서 전체 태스크 폴링 (30초마다)
   const pollTasks = useCallback(async () => {
@@ -552,7 +552,7 @@ export default function Dashboard() {
 
   const startEdit = (task: Task) => {
     setEditingId(task.id);
-    setEditDraft({ from: task.from, to: task.to, message: task.message, deadline: task.deadline });
+    setEditDraft({ from: task.from, to: task.to, message: task.message, startDate: task.startDate || "", deadline: task.deadline });
   };
 
   const saveEdit = (id: string) => {
@@ -768,11 +768,11 @@ export default function Dashboard() {
 
           {/* 필터 */}
           <div className="flex gap-2 mb-2 flex-wrap">
-            {(["all", "pending", "done"] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f as typeof filter)}
+            {(["all", "pending", "in_progress", "done"] as const).map((f) => (
+              <button key={f} onClick={() => setFilter(f)}
                 className={`px-3 py-1 rounded-lg text-xs transition-all ${filter === f ? "text-black" : "text-gray-400"}`}
                 style={{ background: filter === f ? "var(--accent)" : "var(--surface)", border: "1px solid var(--border)" }}>
-                {{ all: "전체", pending: "대기", done: "완료" }[f]}
+                {{ all: "전체", pending: "대기", in_progress: "진행중", done: "완료" }[f]}
               </button>
             ))}
           </div>
@@ -828,10 +828,13 @@ export default function Dashboard() {
                   <div className="space-y-2 mb-3">
                     <div className="flex gap-2">
                       <input value={editDraft.from} onChange={(e) => setEditDraft({ ...editDraft, from: e.target.value })}
-                        placeholder="지시자" className="flex-1 px-2 py-1 rounded text-xs bg-black border border-gray-700 text-white" />
+                        placeholder="지시자" className="w-24 px-2 py-1 rounded text-xs bg-black border border-gray-700 text-white" />
                       <span className="text-gray-500 text-xs self-center">→</span>
                       <input value={editDraft.to} onChange={(e) => setEditDraft({ ...editDraft, to: e.target.value })}
-                        placeholder="수행자" className="flex-1 px-2 py-1 rounded text-xs bg-black border border-gray-700 text-white" />
+                        placeholder="수행자" className="w-24 px-2 py-1 rounded text-xs bg-black border border-gray-700 text-white" />
+                      <input type="date" value={editDraft.startDate} onChange={(e) => setEditDraft({ ...editDraft, startDate: e.target.value })}
+                        className="px-2 py-1 rounded text-xs bg-black border border-gray-700 text-white" />
+                      <span className="text-gray-500 text-xs self-center">~</span>
                       <input type="date" value={editDraft.deadline} onChange={(e) => setEditDraft({ ...editDraft, deadline: e.target.value })}
                         className="px-2 py-1 rounded text-xs bg-black border border-gray-700 text-white" />
                     </div>
@@ -909,11 +912,21 @@ export default function Dashboard() {
               for (let d = 0; d < 7; d++, day++) week.push(day >= 1 && day <= daysInMonth ? day : null);
               weeks.push(week);
             }
+            // startDate~deadline 사이 모든 날짜에 태스크 매핑
             const tasksByDate: Record<string, Task[]> = {};
+            const taskRangeEnd: Record<string, boolean> = {}; // 마감일 여부
             tasks.forEach((t) => {
-              if (t.deadline && t.deadline !== "미정") {
-                if (!tasksByDate[t.deadline]) tasksByDate[t.deadline] = [];
-                tasksByDate[t.deadline].push(t);
+              if (!t.deadline || t.deadline === "미정") return;
+              const start = t.startDate && t.startDate <= t.deadline ? t.startDate : t.deadline;
+              const cur = new Date(start);
+              const end = new Date(t.deadline);
+              while (cur <= end) {
+                const ds = cur.toISOString().split("T")[0];
+                if (!tasksByDate[ds]) tasksByDate[ds] = [];
+                // 같은 태스크 중복 방지
+                if (!tasksByDate[ds].find((x) => x.id === t.id)) tasksByDate[ds].push(t);
+                if (ds === t.deadline) taskRangeEnd[`${ds}__${t.id}`] = true;
+                cur.setDate(cur.getDate() + 1);
               }
             });
             const monthNames = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
@@ -951,12 +964,20 @@ export default function Dashboard() {
                                 <div className={`font-medium mb-1 w-5 h-5 flex items-center justify-center rounded-full text-xs ${isToday ? "text-black font-bold" : di === 0 ? "text-red-400" : di === 6 ? "text-blue-400" : "text-gray-400"}`}
                                   style={isToday ? { background: "var(--accent)" } : undefined}>{d}</div>
                                 <div className="space-y-0.5">
-                                  {dayTasks.slice(0, 2).map((t) => (
-                                    <div key={t.id} className="truncate px-1 py-0.5 rounded leading-tight"
-                                      style={{ background: t.status === "done" ? "#16a34a22" : t.status === "in_progress" ? "#2563eb22" : "#f59e0b22", color: t.status === "done" ? "#4ade80" : t.status === "in_progress" ? "#60a5fa" : "#fbbf24", fontSize: "10px" }}>
-                                      {t.to} · {t.message.slice(0, 8)}
+                                  {dayTasks.slice(0, 2).map((t) => {
+                                    const isEnd = taskRangeEnd[`${dateStr}__${t.id}`];
+                                    const isStart = (t.startDate || t.deadline) === dateStr;
+                                    const color = t.status === "done" ? "#4ade80" : t.status === "in_progress" ? "#60a5fa" : "#fbbf24";
+                                    const bg = t.status === "done" ? "#16a34a33" : t.status === "in_progress" ? "#2563eb33" : "#f59e0b33";
+                                    return (
+                                    <div key={t.id} className="truncate px-1 py-0.5 leading-tight"
+                                      style={{ background: bg, color, fontSize: "10px",
+                                        borderRadius: isStart && isEnd ? "4px" : isStart ? "4px 0 0 4px" : isEnd ? "0 4px 4px 0" : "0",
+                                        fontWeight: isEnd ? 700 : 400 }}>
+                                      {isStart || isEnd ? `${t.to} · ${t.message.slice(0, 6)}` : ""}
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                   {dayTasks.length > 2 && <div className="text-gray-500 pl-1" style={{ fontSize: "10px" }}>+{dayTasks.length - 2}</div>}
                                 </div>
                               </>
