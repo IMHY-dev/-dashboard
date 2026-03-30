@@ -20,7 +20,43 @@ interface Task {
   channel: string;
   timestamp: string;
   notes?: string[];
+  steps?: string[];
+  topicFile?: string;
 }
+
+interface MeetingNote {
+  id: string;
+  title: string;
+  date: string;
+  decisions: string;
+  url: string;
+}
+
+// 에이전트 실행 모드 topic (autoLevel=auto + 실행 가능한 스크립트 있음)
+const AGENT_TOPICS = new Set([
+  "regular/macro-update",
+  "regular/placement-analysis",
+  "fluid/ppt-work",
+]);
+
+// topic별 담당자 (Context/Directory.md 기반)
+const TOPIC_CONTACTS: Record<string, string[]> = {
+  "regular/macro-update":       ["창준님"],
+  "regular/macro-indicators":   ["창준님"],
+  "regular/placement-update":   ["엠브레인 문주원님", "창준님"],
+  "regular/placement-analysis": ["엠브레인 문주원님", "창준님"],
+  "fluid/ppt-work":             ["창준님"],
+  "fluid/academia-contract":    ["총무팀 이민희님", "총무팀 남영현님", "KT alpha 강석현님"],
+  "budget/placement-concur":    ["엠브레인 문주원님", "재무회계팀 박은미님/왕윤형님"],
+  "budget/enkoline-concur":     ["재무회계팀 박은미님/왕윤형님"],
+  "budget/consulting-concur":   ["재무회계팀 박은미님/왕윤형님"],
+  "budget/law-firm":            ["법무팀 윤종화님", "법무팀 박민경님", "재무회계팀"],
+  "budget/ninehire":            ["창준님", "재무회계팀"],
+  "budget/gifticon":            ["KT alpha 강석현님", "ATS운영팀 최돈민님", "창준님"],
+  "budget/budget-transfer":     ["경영기획팀 임장식님", "창준님"],
+  "budget/vendor-registration": ["재무회계팀 박은미님/왕윤형님"],
+  "budget/budget-101":          ["경영기획팀 임장식님"],
+};
 
 function calcDday(deadline: string): string | null {
   if (!deadline || deadline === "미정") return null;
@@ -34,31 +70,16 @@ function calcDday(deadline: string): string | null {
   return `D+${Math.abs(diff)}`;
 }
 
-const ROUTING: Record<string, { category: string; autoLevel: AutoLevel; guide: string; steps: string[] }> = {
-  "플레이스먼트|RMS|서베이|26Q": { category: "Placement 분석", autoLevel: "auto", guide: "Raw → run_jk/am → calc_rms → gen_ppt", steps: ["Raw 데이터 로드", "분류표 매칭 (run_jk.py)", "미분류 리포트 생성", "RMS 계산 (calc_rms.py)", "PPT 생성 (gen_ppt.py)"] },
-  "매크로|KOSIS|경제지표": { category: "Macro 분석", autoLevel: "auto", guide: "python update_macro.py", steps: ["KOSIS 파일 탐색", "데이터 읽기", "Macro 엑셀 열기", "10개 시트 업데이트", "저장"] },
-  "장표|PPT|덱|슬라이드": { category: "장표 제작", autoLevel: "auto", guide: "Claude/Genspark 기반 PPT 생성", steps: ["스토리라인 생성", "슬라이드 구성", "데이터 삽입", "디자인 적용", "PPT 저장"] },
-  "번역|영문|English|translate": { category: "장표 번역", autoLevel: "auto", guide: "python ppt-translate/translate.py", steps: ["PPT 파일 로드", "텍스트박스 크기 분석", "용어집 로드", "Claude API 번역", "후처리 적용", "번역 PPT 저장"] },
-  "품의|예산|구매|전자결재": { category: "예산·구매 품의", autoLevel: "auto", guide: "node fill.js <문서유형> --dry-run", steps: ["문서유형 판단", "템플릿 로드", "폼 자동 입력 (dry-run)", "사용자 검수", "실제 제출"] },
-  "회의록|싱크|미팅노트": { category: "회의록 생성", autoLevel: "auto", guide: "python meeting-notes/summarize.py", steps: ["TXT 파일 읽기", "구조화 요약 생성", "업무지시/방향성 추출", "프리뷰 생성", "Notion 등록"] },
-  "나인하이어|에스크로|스톡옵션|매매대금": { category: "나인하이어 지급", autoLevel: "manual", guide: "에스크로 수수료 → 주식매매대금 → 스톡옵션 순서 진행", steps: ["에스크로 수수료 지급 (매년 12월)", "재직 여부 확인: 정승현/이예린/최돈민/이경환", "주식 매매대금 지급", "스톡옵션 보상 지급: 김재인/안정태/이정욱"] },
-  "산학|EGI|MCSA|프리랜서": { category: "산학협력 계약", autoLevel: "manual", guide: "예산품의→구매검토→구매품의→인장→계약 체결 (5단계)", steps: ["예산품의 작성", "구매검토 요청 (총무팀 이민희님 메일)", "구매품의 작성 (예산품의 하위문건)", "인장관리 (CSO 서명)", "계약 체결"] },
-  "Concur|송장|세금계산서": { category: "Concur 처리", autoLevel: "manual", guide: "담당자 변경 → 연동 송장 마무리 → 제출", steps: ["재무회계팀에 송장 담당자 변경 요청", "연동 송장으로 처리"] },
-};
-
-function matchCategory(text: string) {
-  for (const [keywords, info] of Object.entries(ROUTING)) {
-    const regex = new RegExp(keywords.split("|").join("|"), "i");
-    if (regex.test(text)) return info;
-  }
-  return { category: "미분류", autoLevel: "manual" as AutoLevel, guide: "매뉴얼에 없는 업무입니다. 창준님께 확인하세요.", steps: [] };
-}
-
 export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [context, setContext] = useState<MeetingNote[]>([]);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentResult, setAgentResult] = useState<string | null>(null);
+  const [expandedNote, setExpandedNote] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -66,14 +87,14 @@ export default function TaskDetailPage() {
       .then((data) => {
         const found = data.tasks?.find((t: { id: string }) => t.id === params.id);
         if (found) {
-          const matched = matchCategory(found.message);
-          setTask({
-            ...found,
-            category: matched.category,
-            autoLevel: matched.autoLevel,
-            guide: matched.guide,
-            startDate: found.startDate || "",
-          });
+          setTask({ ...found, startDate: found.startDate || "" });
+          if (found.topicFile) {
+            setContextLoading(true);
+            fetch(`/api/context?topicFile=${encodeURIComponent(found.topicFile)}`)
+              .then((r) => r.json())
+              .then((d) => { setContext(d.results || []); setContextLoading(false); })
+              .catch(() => setContextLoading(false));
+          }
         }
         setLoading(false);
       })
@@ -88,6 +109,28 @@ export default function TaskDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: task.id, status }),
     }).catch(() => {});
+  };
+
+  const runAgent = async () => {
+    if (!task) return;
+    setAgentRunning(true);
+    setAgentResult(null);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: task.category }),
+      });
+      const data = await res.json();
+      setAgentResult(data.success
+        ? `완료${data.outputPath ? ` → ${data.outputPath}` : ""}`
+        : `오류: ${(data.stderr || data.error || "").slice(0, 200)}`
+      );
+    } catch (e) {
+      setAgentResult(`서버 연결 실패: ${e}`);
+    } finally {
+      setAgentRunning(false);
+    }
   };
 
   if (loading) return (
@@ -107,7 +150,8 @@ export default function TaskDetailPage() {
 
   const dday = calcDday(task.deadline);
   const ddayColor = !dday ? "var(--text-muted)" : dday === "D-day" ? "#f59e0b" : dday.startsWith("D+") ? "#ef4444" : parseInt(dday.replace("D-", "")) <= 3 ? "#f97316" : "#9ca3af";
-  const matched = matchCategory(task.message);
+  const isAgentMode = AGENT_TOPICS.has(task.topicFile ?? "");
+  const contacts = TOPIC_CONTACTS[task.topicFile ?? ""] ?? [];
 
   return (
     <div className="min-h-screen p-6 max-w-3xl mx-auto">
@@ -122,14 +166,25 @@ export default function TaskDetailPage() {
       <div className="p-5 rounded-2xl mb-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2 py-0.5 text-xs rounded border bg-blue-500/20 text-blue-400 border-blue-500/30">진행중</span>
-            <span className={`px-2 py-0.5 text-xs rounded border ${task.autoLevel === "auto" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"}`}>
-              {task.autoLevel === "auto" ? "🟢 자동" : "🟡 수동"}
+            <span className={`px-2 py-0.5 text-xs rounded border ${
+              task.status === "pending" ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
+              task.status === "in_progress" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+              "bg-green-500/20 text-green-400 border-green-500/30"
+            }`}>
+              {task.status === "pending" ? "대기" : task.status === "in_progress" ? "진행 중" : "완료"}
+            </span>
+            <span className={`px-2 py-0.5 text-xs rounded border ${
+              isAgentMode ? "bg-green-500/20 text-green-400 border-green-500/30" :
+              task.autoLevel === "manual" ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
+              "bg-gray-500/20 text-gray-400 border-gray-500/30"
+            }`}>
+              {isAgentMode ? "🟢 에이전트" : task.autoLevel === "manual" ? "🟡 가이드" : "📚 지식"}
             </span>
             <h1 className="text-lg font-bold">{task.category}</h1>
           </div>
           {dday && (
-            <span className="text-sm font-bold px-2 py-1 rounded" style={{ color: ddayColor, background: `${ddayColor}22` }}>
+            <span className="text-sm font-bold px-2 py-1 rounded shrink-0"
+              style={{ color: ddayColor, background: `${ddayColor}22` }}>
               {dday}
             </span>
           )}
@@ -144,66 +199,132 @@ export default function TaskDetailPage() {
           <span>마감: <strong className="text-white">{task.deadline}</strong></span>
           <span>{task.channel} · {task.timestamp}</span>
         </div>
-
-        {task.notes && task.notes.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-3">
-            {task.notes.map((note, i) => (
-              <span key={i} className="px-2 py-0.5 rounded-full text-xs bg-gray-800 text-gray-300 border border-gray-700">{note}</span>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* 작업 계획 */}
-      <div className="p-5 rounded-2xl mb-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--accent)" }}>작업 계획</h2>
-        <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>진행방법: {task.guide}</p>
+      {/* ── 에이전트 모드 ── */}
+      {isAgentMode && (
+        <div className="p-5 rounded-2xl mb-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--accent)" }}>에이전트 실행</h2>
+          <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>{task.guide}</p>
 
-        {matched.steps.length > 0 ? (
+          {task.steps && task.steps.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {task.steps.map((step, i) => (
+                <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl text-xs"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 text-black"
+                    style={{ background: "var(--accent)" }}>{i + 1}</span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button onClick={runAgent} disabled={agentRunning}
+            className={`w-full py-3 rounded-xl text-sm font-semibold transition-all ${
+              agentRunning ? "bg-gray-700 text-gray-400 cursor-wait" : "text-black hover:opacity-80"
+            }`}
+            style={agentRunning ? {} : { background: "var(--accent)" }}>
+            {agentRunning ? "⏳ 에이전트 실행 중..." : "▶ 에이전트 실행"}
+          </button>
+
+          {agentResult && (
+            <div className={`mt-3 p-3 rounded-xl text-xs ${
+              agentResult.startsWith("오류") || agentResult.startsWith("서버")
+                ? "bg-red-500/10 text-red-400" : "bg-green-500/10 text-green-400"
+            }`}>
+              {agentResult}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 가이드 모드 ── */}
+      {!isAgentMode && (
+        <div className="p-5 rounded-2xl mb-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--accent)" }}>작업 방식</h2>
+          <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>{task.guide}</p>
+
+          {task.steps && task.steps.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {task.steps.map((step, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-xl text-sm"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 text-black"
+                    style={{ background: "var(--accent)" }}>{i + 1}</span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {contacts.length > 0 && (
+            <div className="p-3 rounded-xl" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+              <div className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>담당자</div>
+              <div className="flex flex-wrap gap-2">
+                {contacts.map((c, i) => (
+                  <span key={i} className="px-2 py-1 text-xs rounded-lg bg-gray-800 text-gray-300 border border-gray-700">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 과거 맥락 (Notion Meeting Notes) ── */}
+      <div className="p-5 rounded-2xl mb-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--accent)" }}>과거 맥락</h2>
+        <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>관련 싱크 기록</p>
+
+        {contextLoading ? (
+          <div className="p-3 text-xs text-center text-gray-500">로딩 중...</div>
+        ) : context.length > 0 ? (
           <div className="space-y-2">
-            {matched.steps.map((step, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-xl text-sm"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-                <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 text-black"
-                  style={{ background: "var(--accent)" }}>{i + 1}</span>
-                <span>{step}</span>
+            {context.map((note) => (
+              <div key={note.id} className="rounded-xl overflow-hidden"
+                style={{ border: "1px solid var(--border)" }}>
+                <div className="p-3 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-all"
+                  style={{ background: "var(--bg)" }}
+                  onClick={() => setExpandedNote(expandedNote === note.id ? null : note.id)}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs shrink-0" style={{ color: "var(--text-muted)" }}>{note.date}</span>
+                    <span className="text-sm truncate">{note.title}</span>
+                  </div>
+                  <span className="text-xs text-gray-500 shrink-0 ml-2">{expandedNote === note.id ? "▲" : "▼"}</span>
+                </div>
+                {expandedNote === note.id && (
+                  <div className="p-3 border-t text-xs text-gray-300 whitespace-pre-wrap leading-relaxed"
+                    style={{ borderColor: "var(--border)" }}>
+                    {note.decisions}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         ) : (
-          <div className="p-3 rounded-xl text-sm" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-            수동 진행 업무입니다. 아래 가이드를 참고하세요.
+          <div className="p-3 rounded-xl text-xs text-gray-500 text-center"
+            style={{ border: "1px dashed var(--border)" }}>
+            관련 싱크 기록이 없습니다
           </div>
         )}
       </div>
 
-      {/* 과거 맥락 (placeholder) */}
-      <div className="p-5 rounded-2xl mb-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--accent)" }}>과거 맥락</h2>
-        <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>슬랙·싱크 기반 이전 작업 이력 (준비 중)</p>
-        <div className="p-3 rounded-xl text-xs text-gray-500 text-center" style={{ border: "1px dashed var(--border)" }}>
-          노션 Meeting Notes 연동 후 자동 표시 예정
-        </div>
-      </div>
-
-      {/* 현재 맥락 (placeholder) */}
-      <div className="p-5 rounded-2xl mb-6" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--accent)" }}>현재 맥락</h2>
-        <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>슬랙 스레드 기반 추가 정보</p>
-        {task.notes && task.notes.length > 0 ? (
+      {/* ── 현재 맥락 (슬랙 스레드) ── */}
+      {task.notes && task.notes.length > 0 && (
+        <div className="p-5 rounded-2xl mb-6" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--accent)" }}>현재 맥락</h2>
+          <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>슬랙 스레드 추가 정보</p>
           <div className="space-y-1">
             {task.notes.map((note, i) => (
-              <div key={i} className="p-2 rounded text-xs text-gray-300" style={{ background: "var(--bg)" }}>· {note}</div>
+              <div key={i} className="p-2 rounded text-xs text-gray-300" style={{ background: "var(--bg)" }}>
+                · {note}
+              </div>
             ))}
           </div>
-        ) : (
-          <div className="p-3 rounded-xl text-xs text-gray-500 text-center" style={{ border: "1px dashed var(--border)" }}>
-            슬랙 스레드 댓글이 없습니다
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* 액션 버튼 */}
+      {/* ── 액션 버튼 ── */}
       <div className="flex gap-3">
         <button onClick={() => { updateStatus("pending"); router.push("/"); }}
           className="px-4 py-2 rounded-lg text-sm border border-gray-700 text-gray-400 hover:bg-gray-800 transition-all">
