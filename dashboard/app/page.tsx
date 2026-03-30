@@ -480,7 +480,7 @@ export default function Dashboard() {
       const res = await fetch("/api/slack-webhook");
       const data = await res.json();
       if (data.tasks && data.tasks.length > 0) {
-        const newTasks: Task[] = data.tasks.map((t: { id: string; from: string; to: string; message: string; channel: string; timestamp: string }) => {
+        const newTasks: Task[] = data.tasks.map((t: { id: string; from: string; to: string; message: string; channel: string; timestamp: string; deadline?: string }) => {
           const matched = matchCategory(t.message);
           return {
             id: t.id,
@@ -488,7 +488,7 @@ export default function Dashboard() {
             to: t.to,
             message: t.message,
             category: matched.category,
-            deadline: "미정",
+            deadline: t.deadline || "미정",
             status: "pending" as TaskStatus,
             autoLevel: matched.autoLevel,
             guide: matched.guide,
@@ -496,7 +496,12 @@ export default function Dashboard() {
             timestamp: t.timestamp,
           };
         });
-        setTasks((prev) => [...newTasks, ...prev]);
+        // 중복 방지: 이미 있는 ID는 추가하지 않음
+        setTasks((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          const fresh = newTasks.filter((t) => !existingIds.has(t.id));
+          return fresh.length > 0 ? [...fresh, ...prev] : prev;
+        });
       }
     } catch {
       // 서버 미연결 시 무시
