@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 // ─── 타입 ───
 type TaskStatus = "pending" | "in_progress" | "done";
 type AutoLevel = "auto" | "manual" | "knowledge";
-type TabType = "tasks" | "meeting" | "knowledge";
+type TabType = "tasks" | "meeting" | "agents" | "knowledge";
 
 function calcDday(deadline: string): string | null {
   if (!deadline || deadline === "미정") return null;
@@ -314,36 +314,68 @@ function ExecutionLog({ steps, outputFile }: { steps: ExecutionStep[]; outputFil
   );
 }
 
-function SkillCard({ name, ready, command, onRun }: { name: string; ready: boolean; command: string; onRun?: () => void }) {
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+// ─── Agent 정의 ───
+const AGENTS = [
+  {
+    name: "Macro 분석",
+    topicFile: "regular/macro-update",
+    description: "KOSIS 데이터 → Macro Analysis 엑셀 10개 시트 자동 업데이트",
+    command: "python update_macro.py",
+    ready: true,
+    href: "/agents/macro",
+  },
+  {
+    name: "Placement 분석",
+    topicFile: "regular/placement-analysis",
+    description: "Placement Survey 파이프라인: Raw → R_통합 → RMS → PPT",
+    command: "python run_placement_agent.py --quarter",
+    ready: true,
+    href: "/agents/placement",
+  },
+  {
+    name: "장표 번역",
+    topicFile: "fluid/ppt-translate",
+    description: "한글 PPT → 영문 PPT 번역 (용어집 + 후처리)",
+    command: "python ppt-translater/translate.py",
+    ready: true,
+    href: "/agents/translate",
+  },
+  {
+    name: "예산·구매 품의",
+    topicFile: "fluid/budget-draft",
+    description: "Playwright 브라우저 자동화로 전자결재 자동 입력",
+    command: "node auto.js",
+    ready: true,
+    href: "/agents/budget",
+  },
+  {
+    name: "장표 제작",
+    topicFile: "fluid/ppt-create",
+    description: "맥락 → 스토리라인 → 레이아웃 → PPTX 생성",
+    command: "python ppt-maker/create.py",
+    ready: true,
+    href: "/agents/create",
+  },
+];
 
-  const handleRun = async () => {
-    if (!ready || running) return;
-    setRunning(true);
-    setResult(null);
+function AgentCard({ agent }: { agent: typeof AGENTS[number] }) {
+  return (
+    <a href={agent.href}
+      className={`block p-5 rounded-xl border transition-all hover:scale-[1.02] cursor-pointer ${agent.ready ? "border-green-500/30 bg-green-500/5 hover:border-green-500/60" : "border-gray-700 bg-gray-800/30"}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-medium">{agent.name}</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full ${agent.ready ? "bg-green-500/20 text-green-400" : "bg-gray-700 text-gray-400"}`}>
+          {agent.ready ? "● 활성" : "○ 준비 중"}
+        </span>
+      </div>
+      <p className="text-xs text-gray-400 mb-1">{agent.description}</p>
+      <code className="text-xs text-gray-500 block mb-3">{agent.command}</code>
+      <div className="text-xs text-right" style={{ color: "var(--accent)" }}>열기 →</div>
+    </a>
+  );
+}
 
-    try {
-      const res = await fetch("/api/agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: name }),
-      });
-      const data = await res.json();
-      setResult({
-        success: data.success,
-        message: data.success
-          ? `완료! ${data.outputPath ? `→ ${data.outputPath}` : ""}`
-          : `오류: ${(data.stderr || data.error || "").slice(0, 150)}`,
-      });
-      if (onRun) onRun();
-    } catch (err) {
-      setResult({ success: false, message: `서버 연결 실패: ${err}` });
-    } finally {
-      setRunning(false);
-    }
-  };
-
+function SkillCard({ name, ready, command }: { name: string; ready: boolean; command: string }) {
   return (
     <div className={`p-4 rounded-xl border transition-all ${ready ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
       <div className="flex items-center justify-between mb-2">
@@ -352,21 +384,7 @@ function SkillCard({ name, ready, command, onRun }: { name: string; ready: boole
           {ready ? "✅ 구현됨" : "❌ 미구현"}
         </span>
       </div>
-      <code className="text-xs text-gray-400 block truncate mb-3">{command}</code>
-      {ready && (
-        <button
-          onClick={handleRun}
-          disabled={running}
-          className={`w-full px-3 py-1.5 rounded text-xs font-medium transition-all ${running ? "bg-gray-700 text-gray-400 cursor-wait" : "text-black hover:opacity-80"}`}
-          style={running ? {} : { background: "var(--accent)" }}>
-          {running ? "⏳ 실행 중..." : "▶ 실행"}
-        </button>
-      )}
-      {result && (
-        <div className={`mt-2 p-2 rounded text-xs ${result.success ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
-          {result.message}
-        </div>
-      )}
+      <code className="text-xs text-gray-400 block truncate">{command}</code>
     </div>
   );
 }
@@ -756,6 +774,7 @@ export default function Dashboard() {
         {([
           { key: "tasks", label: "📋 업무 관리", count: stats.total },
           { key: "meeting", label: "🎙️ 회의록", count: meetings.length },
+          { key: "agents", label: "🤖 Agent", count: AGENTS.filter(a => a.ready).length },
           { key: "knowledge", label: "📚 지식 베이스", count: KNOWLEDGE_BASE.length },
         ] as { key: TabType; label: string; count: number | null }[]).map((tab) => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
@@ -1050,16 +1069,15 @@ export default function Dashboard() {
             );
           })()}
 
-          {/* 자동 처리 Skill 현황 */}
-          <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>⚡ 에이전트 현황 (6개 중 4개 구현)</h2>
+          {/* 자동 처리 Agent 요약 */}
+          <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>⚡ 에이전트 현황 ({AGENTS.filter(a => a.ready).length}/{AGENTS.length}개 활성)</h2>
           <div className="grid grid-cols-3 gap-3">
-            <SkillCard name="예산·구매 품의" ready={true} command="node fill.js" />
-            <SkillCard name="장표 번역" ready={true} command="python translate.py" />
-            <SkillCard name="Macro 분석" ready={true} command="python update_macro.py" />
+            {AGENTS.map((a) => (
+              <SkillCard key={a.topicFile} name={a.name} ready={a.ready} command={a.command} />
+            ))}
             <SkillCard name="회의록 생성" ready={true} command="python summarize.py" />
-            <SkillCard name="장표 제작" ready={false} command="Claude/Genspark (미구현)" />
-            <SkillCard name="Placement 분석" ready={false} command="run_jk → calc_rms → gen_ppt (미구현)" />
           </div>
+          <p className="text-xs text-gray-500 mt-2">실행 및 파라미터 입력은 🤖 Agent 탭에서 가능합니다.</p>
         </>
       )}
 
@@ -1280,6 +1298,20 @@ export default function Dashboard() {
           </div>
         );
       })()}
+
+      {/* ─── 탭: Agent ─── */}
+      {activeTab === "agents" && (
+        <div>
+          <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+            등록된 에이전트를 직접 실행하고 결과를 확인합니다. 파라미터 입력 후 ▶ 실행을 누르세요.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            {AGENTS.map((agent) => (
+              <AgentCard key={agent.topicFile} agent={agent} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── 탭: 지식 베이스 ─── */}
       {activeTab === "knowledge" && (
