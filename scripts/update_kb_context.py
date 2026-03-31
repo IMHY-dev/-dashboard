@@ -10,6 +10,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import urllib.parse
+import requests
 import anthropic
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -17,6 +19,9 @@ from slack_sdk.errors import SlackApiError
 # ── 설정 ────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 SLACK_TOKEN       = os.environ["SLACK_TOKEN"]
+NOTION_TOKEN      = urllib.parse.unquote(os.environ.get("NOTION_TOKEN", ""))
+
+NOTION_DB_ID = "32e7d832-2b04-806c-be8d-000b96d10c5b"
 
 SLACK_CHANNEL_NAMES = [
     "전략추진실-창준님",
@@ -105,6 +110,53 @@ def fetch_slack_messages(since: datetime) -> list[dict]:
             print(f"Slack error ({ch_name}): {e.response['error']}")
 
     return messages
+
+
+# ── Notion ───────────────────────────────────────────────
+def fetch_notion_syncs(since: datetime) -> list[dict]:
+    """token_v2 쿠키로 Notion Meeting Notes DB 새 항목 수집."""
+    if not NOTION_TOKEN:
+        return []
+
+    since_str = since.strftime("%Y-%m-%d")
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+    }
+
+    resp = requests.post(
+        f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query",
+        headers=headers,
+        json={
+            "filter": {"property": "일시", "date": {"on_or_after": since_str}},
+            "sorts": [{"property": "일시", "direction": "ascending"}],
+        },
+        timeout=10,
+    )
+
+    if resp.status_code != 200:
+        print(f"Notion error: {resp.status_code} {resp.text[:200]}")
+        return []
+
+    syncs = []
+    for page in resp.json().get("results", []):
+        props = page.get("properties", {})
+        title_arr = props.get("제목", {}).get("title", [])
+        title = title_arr[0]["plain_text"] if title_arr else ""
+        date = props.get("일시", {}).get("date", {}).get("start", "")
+        text_arr = props.get("결정사항", {}).get("rich_text", [])
+        content = "".join(b["plain_text"] for b in text_arr)
+
+        if title and date:
+            syncs.append({
+                "source": "notion_sync",
+                "date": date,
+                "title": title,
+                "content": content[:1000],
+            })
+
+    return syncs
 
 
 # ── Claude 분석 ──────────────────────────────────────────
@@ -218,9 +270,12 @@ def main():
 
     # 1. 새 내용 수집
     slack_messages = fetch_slack_messages(since)
-    print(f"Slack messages: {len(slack_messages)}")
+    notion_syncs   = fetch_notion_syncs(since)
 
-    all_new = slack_messages
+    print(f"Slack messages: {len(slack_messages)}")
+    print(f"Notion syncs:   {len(notion_syncs)}")
+
+    all_new = slack_messages + notion_syncs
     if not all_new:
         print("새 내용 없음. 종료.")
         save_last_update()
