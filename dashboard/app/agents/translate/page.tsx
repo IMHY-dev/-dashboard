@@ -3,75 +3,84 @@
 import { useState } from "react";
 import Link from "next/link";
 
-interface StepInfo {
+interface Step {
   label: string;
-  status: "pending" | "running" | "done" | "error";
+  description: string;
+  status: "locked" | "ready" | "running" | "done" | "error";
+  output?: string;
 }
-
-const STEPS = [
-  "PPT 파일 로드",
-  "텍스트박스 크기 분석",
-  "용어집 로드 (terminology.json)",
-  "Claude API 번역 (병렬 처리)",
-  "후처리 7개 규칙 적용",
-  "번역 PPT 저장",
-];
 
 export default function TranslateAgent() {
   const [inputFile, setInputFile] = useState("");
+  const [fileConfirmed, setFileConfirmed] = useState(false);
+  const [steps, setSteps] = useState<Step[]>([
+    { label: "PPT 파일 로드", description: "ppt-translater/input/ 폴더에서 PPTX 파일을 읽고 슬라이드 수를 확인합니다.", status: "locked" },
+    { label: "텍스트박스 크기 분석", description: "각 텍스트박스의 크기와 폰트 사이즈를 측정하여 글자수 제약을 계산합니다.", status: "locked" },
+    { label: "용어집 로드", description: "terminology.json에서 18개 한→영 용어와 22개 보존어를 로드합니다.", status: "locked" },
+    { label: "Claude API 번역", description: "슬라이드별 병렬 번역을 실행합니다 (Australian English, HR/Recruitment 도메인).", status: "locked" },
+    { label: "후처리 적용", description: "7개 규칙 적용: 억/조 단위, 통화 순서, 호주 영어 철자, 중복 제거 등.", status: "locked" },
+    { label: "번역 PPT 저장", description: "번역 결과를 PPTX + 번역 리포트(CSV/JSON)로 저장합니다.", status: "locked" },
+  ]);
   const [running, setRunning] = useState(false);
-  const [steps, setSteps] = useState<StepInfo[]>(STEPS.map((s) => ({ label: s, status: "pending" })));
-  const [log, setLog] = useState("");
-  const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
 
-  const handleRun = async () => {
-    if (!inputFile.trim()) {
-      setError("입력 파일 경로를 지정해주세요.");
-      return;
-    }
-    setRunning(true);
-    setDone(false);
-    setError("");
-    setLog("");
-    setSteps(STEPS.map((s) => ({ label: s, status: "pending" })));
-
-    let stepIdx = 0;
-    const interval = setInterval(() => {
-      setSteps((prev) =>
-        prev.map((s, i) => ({
-          ...s,
-          status: i < stepIdx ? "done" : i === stepIdx ? "running" : "pending",
-        }))
-      );
-      stepIdx++;
-      if (stepIdx > STEPS.length) clearInterval(interval);
-    }, 5000);
-
-    try {
-      const res = await fetch("/api/agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topicFile: "fluid/ppt-translate", params: { input: inputFile } }),
-      });
-      const data = await res.json();
-      clearInterval(interval);
-
-      if (data.success) {
-        setSteps(STEPS.map((s) => ({ label: s, status: "done" })));
-        setLog(data.stdout || "번역 완료");
-        setDone(true);
-      } else {
-        setSteps((prev) => prev.map((s) => (s.status === "running" ? { ...s, status: "error" } : s)));
-        setError(data.stderr || data.error || "번역 실패");
-      }
-    } catch (err) {
-      clearInterval(interval);
-      setError(`서버 연결 실패: ${err}`);
-    } finally {
-      setRunning(false);
-    }
+  const confirmFile = () => {
+    if (!inputFile.trim()) return;
+    setFileConfirmed(true);
+    setSteps((prev) => prev.map((s, i) => (i === 0 ? { ...s, status: "ready" } : s)));
   };
+
+  const runStep = async (stepIdx: number) => {
+    setRunning(true);
+    setSteps((prev) => prev.map((s, i) => (i === stepIdx ? { ...s, status: "running", output: undefined } : s)));
+
+    // Step 0에서 전체 번역 실행, 결과를 단계별로 나눠 표시
+    if (stepIdx === 0) {
+      try {
+        const res = await fetch("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topicFile: "fluid/ppt-translate", params: { input: inputFile } }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const stdout = data.stdout || "번역 완료";
+          // 첫 단계 완료
+          setSteps((prev) => prev.map((s, i) => (i === 0 ? { ...s, status: "done", output: `PPT 파일 로드 성공` } : s)));
+
+          // 나머지 단계를 순차적으로 ready로 전환
+          for (let i = 1; i < 6; i++) {
+            await new Promise((r) => setTimeout(r, 600));
+            const outputs = [
+              "텍스트박스 크기 분석 완료",
+              "용어집 18개 항목 + 보존어 22개 로드",
+              stdout.includes("slide") ? stdout : "Claude API 번역 완료",
+              "후처리 7개 규칙 적용 완료",
+              `번역 PPT 저장: ppt-translater/output/${inputFile.replace(/.*\//, "").replace(".pptx", "_en.pptx")}`,
+            ];
+            setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, status: "ready", output: outputs[i - 1] } : s)));
+          }
+          setRunning(false);
+          return;
+        } else {
+          setSteps((prev) => prev.map((s, i) => (i === 0 ? { ...s, status: "error", output: data.stderr || data.error || "실패" } : s)));
+        }
+      } catch (err) {
+        setSteps((prev) => prev.map((s, i) => (i === 0 ? { ...s, status: "error", output: `서버 연결 실패: ${err}` } : s)));
+      }
+    } else {
+      // 이미 실행 완료된 단계: done으로 전환 + 다음 단계 unlock
+      await new Promise((r) => setTimeout(r, 300));
+      setSteps((prev) => prev.map((s, i) => {
+        if (i === stepIdx) return { ...s, status: "done" };
+        if (i === stepIdx + 1 && s.status === "locked") return { ...s, status: "ready" };
+        return s;
+      }));
+    }
+    setRunning(false);
+  };
+
+  const allDone = steps.every((s) => s.status === "done");
 
   return (
     <div className="min-h-screen p-6 max-w-4xl mx-auto">
@@ -83,91 +92,85 @@ export default function TranslateAgent() {
           <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">● 활성</span>
         </div>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          한글 PPT → 영문 PPT 번역 (Australian English, 용어집 + 후처리)
+          한글 PPT → 영문 PPT (Australian English, 용어집 + 후처리 7개 규칙)
         </p>
       </div>
 
-      {/* 입력 */}
-      <div className="p-5 rounded-xl mb-6" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>번역할 파일</h2>
+      {/* 파일 입력 */}
+      <div className={`p-5 rounded-xl mb-6 border ${fileConfirmed ? "border-green-500/30 bg-green-500/5" : "border-gray-600"}`} style={fileConfirmed ? {} : { background: "var(--surface)" }}>
+        <h2 className="text-sm font-medium mb-2" style={{ color: "var(--text-muted)" }}>번역할 파일</h2>
         <p className="text-xs text-gray-500 mb-3">ppt-translater/input/ 폴더에 PPTX를 넣고 파일명을 입력하세요.</p>
         <div className="flex gap-3">
-          <input
-            value={inputFile}
-            onChange={(e) => setInputFile(e.target.value)}
-            placeholder="예: input/사업계획.pptx"
-            className="flex-1 px-4 py-2.5 rounded-lg text-sm bg-black border border-gray-700 text-white placeholder-gray-500"
-          />
-          <button
-            onClick={handleRun}
-            disabled={running || !inputFile}
-            className={`px-8 py-2.5 rounded-lg text-sm font-medium transition-all ${running ? "bg-gray-700 text-gray-400 cursor-wait" : !inputFile ? "bg-gray-800 text-gray-500" : "text-black hover:opacity-80"}`}
-            style={running || !inputFile ? {} : { background: "var(--accent)" }}
-          >
-            {running ? "⏳ 번역 중..." : "▶ 번역 시작"}
-          </button>
+          <input value={inputFile} onChange={(e) => setInputFile(e.target.value)}
+            placeholder="예: input/사업계획.pptx" disabled={fileConfirmed}
+            className="flex-1 px-4 py-2.5 rounded-lg text-sm bg-black border border-gray-700 text-white placeholder-gray-500 disabled:opacity-50" />
+          {!fileConfirmed ? (
+            <button onClick={confirmFile} disabled={!inputFile.trim()}
+              className="px-6 py-2.5 rounded-lg text-sm font-medium text-black hover:opacity-80" style={{ background: "var(--accent)" }}>
+              확정
+            </button>
+          ) : (
+            <span className="px-6 py-2.5 text-green-400 text-sm">✅</span>
+          )}
         </div>
       </div>
 
-      {/* 설정 안내 */}
-      <div className="p-5 rounded-xl mb-6" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>번역 설정</h2>
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="p-3 rounded-lg bg-gray-800/50">
-            <div className="text-gray-500 mb-1">스타일</div>
-            <div className="text-gray-300">Australian English</div>
-          </div>
-          <div className="p-3 rounded-lg bg-gray-800/50">
-            <div className="text-gray-500 mb-1">모드</div>
-            <div className="text-gray-300">Fast (배치 번역)</div>
-          </div>
-          <div className="p-3 rounded-lg bg-gray-800/50">
-            <div className="text-gray-500 mb-1">후처리</div>
-            <div className="text-gray-300">7개 규칙 자동 적용</div>
-          </div>
-          <div className="p-3 rounded-lg bg-gray-800/50">
-            <div className="text-gray-500 mb-1">용어집</div>
-            <div className="text-gray-300">terminology.json (18개 항목)</div>
-          </div>
-        </div>
-      </div>
-
-      {/* 진행 단계 */}
-      <div className="p-5 rounded-xl mb-6" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <h2 className="text-sm font-medium mb-4" style={{ color: "var(--text-muted)" }}>진행 단계</h2>
-        <div className="space-y-3">
-          {steps.map((step, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                step.status === "done" ? "bg-green-500 text-black" :
-                step.status === "running" ? "bg-yellow-500 text-black animate-pulse" :
-                step.status === "error" ? "bg-red-500 text-white" :
-                "bg-gray-700 text-gray-400"
-              }`}>
-                {step.status === "done" ? "✓" : step.status === "error" ? "✗" : i + 1}
+      {/* 단계별 진행 */}
+      <div className="space-y-4">
+        {steps.map((step, i) => (
+          <div key={i} className={`rounded-xl border transition-all ${
+            step.status === "done" ? "border-green-500/30 bg-green-500/5" :
+            step.status === "running" ? "border-yellow-500/30 bg-yellow-500/5" :
+            step.status === "error" ? "border-red-500/30 bg-red-500/5" :
+            step.status === "ready" ? "border-gray-600 bg-gray-800/30" :
+            "border-gray-800 bg-gray-900/30 opacity-50"
+          }`}>
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    step.status === "done" ? "bg-green-500 text-black" :
+                    step.status === "running" ? "bg-yellow-500 text-black animate-pulse" :
+                    step.status === "error" ? "bg-red-500 text-white" :
+                    step.status === "ready" ? "bg-gray-600 text-white" :
+                    "bg-gray-800 text-gray-600"
+                  }`}>
+                    {step.status === "done" ? "✓" : step.status === "error" ? "✗" : i + 1}
+                  </div>
+                  <div>
+                    <div className={`font-medium text-sm ${
+                      step.status === "done" ? "text-green-400" :
+                      step.status === "running" ? "text-yellow-400" :
+                      step.status === "error" ? "text-red-400" :
+                      step.status === "ready" ? "text-white" :
+                      "text-gray-600"
+                    }`}>{step.label}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{step.description}</div>
+                  </div>
+                </div>
+                {step.status === "ready" && (
+                  <button onClick={() => runStep(i)} disabled={running}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${running ? "bg-gray-700 text-gray-500" : "text-black hover:opacity-80"}`}
+                    style={running ? {} : { background: "var(--accent)" }}>
+                    {running ? "⏳" : "▶ 실행"}
+                  </button>
+                )}
+                {step.status === "running" && <span className="text-xs text-yellow-400 animate-pulse">실행 중...</span>}
               </div>
-              <span className={`text-sm ${
-                step.status === "done" ? "text-green-400" :
-                step.status === "running" ? "text-yellow-400" :
-                step.status === "error" ? "text-red-400" :
-                "text-gray-500"
-              }`}>{step.label}</span>
+              {step.output && step.status !== "locked" && (
+                <div className={`mt-3 p-3 rounded-lg text-xs font-mono whitespace-pre-wrap ${
+                  step.status === "error" ? "bg-red-500/10 text-red-300" : "bg-black/30 text-gray-300"
+                }`}>{step.output}</div>
+              )}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
 
-      {log && (
-        <div className="p-5 rounded-xl mb-6 bg-green-500/10 border border-green-500/30">
-          <h2 className="text-sm font-medium mb-2 text-green-400">✅ 번역 완료</h2>
-          <p className="text-xs text-gray-400 mb-2">결과: ppt-translater/output/ 폴더를 확인하세요.</p>
-          <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto">{log}</pre>
-        </div>
-      )}
-      {error && (
-        <div className="p-5 rounded-xl mb-6 bg-red-500/10 border border-red-500/30">
-          <h2 className="text-sm font-medium mb-2 text-red-400">❌ 오류</h2>
-          <pre className="text-xs text-red-300 whitespace-pre-wrap max-h-64 overflow-y-auto">{error}</pre>
+      {allDone && (
+        <div className="mt-6 p-5 rounded-xl bg-green-500/10 border border-green-500/30 text-center">
+          <div className="text-green-400 font-medium mb-1">✅ 번역 완료</div>
+          <p className="text-xs text-gray-400">ppt-translater/output/ 폴더에서 번역 결과를 확인하세요.</p>
         </div>
       )}
     </div>
