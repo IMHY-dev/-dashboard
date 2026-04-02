@@ -1,0 +1,30 @@
+{
+  "meeting_date": "2026-01-30",
+  "title": "Seek 방문 대비 & 리브트데이 장표 Sync",
+  "participants": [
+    "팀원"
+  ],
+  "summary": "SEEK 방문 준비 및 리브트데이 관련 장표 작업 논의.",
+  "key_topics": [
+    {
+      "topic": "SEEK 방문 준비",
+      "details": "호주 구인구직 플랫폼 SEEK 방문 대비 자료 준비 및 번역 작업.",
+      "decisions": [
+        "PPT 번역 에이전트 활용",
+        "호주 영어 스타일 가이드 적용"
+      ]
+    },
+    {
+      "topic": "리브트데이 장표",
+      "details": "리브트데이 관련 프레젠테이션 자료 제작.",
+      "decisions": [
+        "장표 제작 에이전트 활용 검토",
+        "번역 후 검토 프로세스 확정"
+      ]
+    }
+  ],
+  "action_items": [
+    "SEEK 방문 PPT 번역 완료",
+    "리브트데이 장표 초안 작성"
+  ]
+}
