@@ -1,0 +1,29 @@
+{
+  "meeting_date": "2026-03-16",
+  "title": "매크로 퀄리티 지표 분석 Sync",
+  "participants": [
+    "팀원"
+  ],
+  "summary": "KOSIS 기반 매크로 경제 지표 퀄리티 분석 및 업데이트 방법론 논의.",
+  "key_topics": [
+    {
+      "topic": "매크로 퀄리티 지표",
+      "details": "KOSIS에서 수집한 매크로 경제지표의 품질 검증 방법 및 분석 체계 구축.",
+      "decisions": [
+        "매크로 업데이트 자동화 에이전트 활용",
+        "월별 업데이트 주기 확정"
+      ]
+    },
+    {
+      "topic": "지표 분석 방법론",
+      "details": "10개 시트 기반 Macro Analysis 엑셀 업데이트 프로세스 검토.",
+      "decisions": [
+        "ExcelJS 기반 자동 업데이트 구현 완료 확인"
+      ]
+    }
+  ],
+  "action_items": [
+    "매크로 분석 엑셀 업데이트 테스트",
+    "KOSIS 데이터 수집 자동화"
+  ]
+}
