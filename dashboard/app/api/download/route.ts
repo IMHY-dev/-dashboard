@@ -4,7 +4,7 @@ import path from "path";
 
 export async function GET(req: NextRequest) {
   const filePath = req.nextUrl.searchParams.get("path");
-  if (!filePath || !filePath.startsWith("/tmp/")) {
+  if (!filePath) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
 

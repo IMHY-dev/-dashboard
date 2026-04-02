@@ -16,6 +16,7 @@ export default function TranslateAgent() {
   const [outputPath, setOutputPath] = useState("");
   const [fileUploaded, setFileUploaded] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [steps, setSteps] = useState<Step[]>([
@@ -31,6 +32,7 @@ export default function TranslateAgent() {
   const uploadFile = async () => {
     if (!pptxFile) return;
     setUploading(true);
+    setUploadError("");
     try {
       const form = new FormData();
       form.append("file", pptxFile);
@@ -40,9 +42,11 @@ export default function TranslateAgent() {
         setPptxPath(data.path);
         setFileUploaded(true);
         setSteps((prev) => prev.map((s, i) => (i === 0 ? { ...s, status: "ready" } : s)));
+      } else {
+        setUploadError(data.error || `업로드 실패 (HTTP ${res.status})`);
       }
     } catch (err) {
-      console.error(err);
+      setUploadError(`업로드 에러: ${err}`);
     }
     setUploading(false);
   };
@@ -105,12 +109,17 @@ export default function TranslateAgent() {
             <button onClick={uploadFile} disabled={!pptxFile || uploading}
               className="px-6 py-2.5 rounded-lg text-sm font-medium text-black hover:opacity-80 disabled:opacity-30"
               style={{ background: "var(--accent)" }}>
-              {uploading ? "⏳" : "업로드"}
+              {uploading ? "⏳ 업로드 중..." : "업로드"}
             </button>
           ) : (
             <span className="px-6 py-2.5 text-green-400 text-sm">✅</span>
           )}
         </div>
+        {uploadError && (
+          <div className="mt-3 p-3 rounded-lg text-xs font-mono bg-red-500/10 text-red-300">
+            {uploadError}
+          </div>
+        )}
       </div>
 
       {/* 단계별 진행 */}
