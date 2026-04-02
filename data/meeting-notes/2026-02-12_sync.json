@@ -1,0 +1,29 @@
+{
+  "meeting_date": "2026-02-12",
+  "title": "잡플래닛 커뮤니티 전략 Sync",
+  "participants": [
+    "팀원"
+  ],
+  "summary": "잡플래닛 커뮤니티 활성화 전략 및 데이터 분석 방향 논의.",
+  "key_topics": [
+    {
+      "topic": "잡플래닛 커뮤니티",
+      "details": "잡플래닛 커뮤니티 데이터 분석 및 활성화 전략 수립.",
+      "decisions": [
+        "커뮤니티 지표 정의",
+        "분기별 리포트 작성"
+      ]
+    },
+    {
+      "topic": "Placement Survey 연계",
+      "details": "잡플래닛 데이터와 Placement Survey 결과 연계 분석 방안.",
+      "decisions": [
+        "데이터 통합 분석 파이프라인 검토"
+      ]
+    }
+  ],
+  "action_items": [
+    "잡플래닛 커뮤니티 지표 분석",
+    "분기 리포트 초안 작성"
+  ]
+}
