@@ -132,5 +132,16 @@
     "deadline": "미정",
     "status": "pending",
     "slackTs": "1775123983.117889"
+  },
+  {
+    "id": "slack-1775189973.189329",
+    "from": "김범석",
+    "to": "임성욱",
+    "message": "혹시 두분 업무 여유 있으신가요?",
+    "channel": "C09868K0QJJ",
+    "timestamp": "2026. 4. 3. 오후 1:19:33",
+    "deadline": "미정",
+    "status": "pending",
+    "slackTs": "1775189973.189329"
   }
 ]
